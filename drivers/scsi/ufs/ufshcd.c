@@ -656,6 +656,393 @@ static int ufshcd_memory_alloc(struct ufs_hba *hba)
 {
 	size_t utmrdl_size, utrdl_size, ucdl_size;
 
+	resp = ufshcd_get_req_rsp(lrbp->ucd_rsp_ptr);
+
+	switch (resp) {
+	case UPIU_TRANSACTION_NOP_IN:
+		if (hba->dev_cmd.type != DEV_CMD_TYPE_NOP) {
+			err = -EINVAL;
+			dev_err(hba->dev, "%s: unexpected response %x\n",
+					__func__, resp);
+		}
+		break;
+	case UPIU_TRANSACTION_QUERY_RSP:
+		err = ufshcd_check_query_response(hba, lrbp);
+		if (!err)
+			err = ufshcd_copy_query_response(hba, lrbp);
+		break;
+	case UPIU_TRANSACTION_REJECT_UPIU:
+		/* TODO: handle Reject UPIU Response */
+		err = -EPERM;
+		dev_err(hba->dev, "%s: Reject UPIU not fully implemented\n",
+				__func__);
+		break;
+	default:
+		err = -EINVAL;
+		dev_err(hba->dev, "%s: Invalid device management cmd response: %x\n",
+				__func__, resp);
+		break;
+	}
+
+	return err;
+}
+
+static int ufshcd_wait_for_dev_cmd(struct ufs_hba *hba,
+		struct ufshcd_lrb *lrbp, int max_timeout)
+{
+	int err = 0;
+	unsigned long time_left;
+	unsigned long flags;
+
+	time_left = wait_for_completion_timeout(hba->dev_cmd.complete,
+			msecs_to_jiffies(max_timeout));
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->dev_cmd.complete = NULL;
+	if (likely(time_left)) {
+		err = ufshcd_get_tr_ocs(lrbp);
+		if (!err)
+			err = ufshcd_dev_cmd_completion(hba, lrbp);
+	}
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	if (!time_left) {
+		err = -ETIMEDOUT;
+		if (!ufshcd_clear_cmd(hba, lrbp->task_tag))
+			/* sucessfully cleared the command, retry if needed */
+			err = -EAGAIN;
+	}
+
+	return err;
+}
+
+/**
+ * ufshcd_get_dev_cmd_tag - Get device management command tag
+ * @hba: per-adapter instance
+ * @tag: pointer to variable with available slot value
+ *
+ * Get a free slot and lock it until device management command
+ * completes.
+ *
+ * Returns false if free slot is unavailable for locking, else
+ * return true with tag value in @tag.
+ */
+static bool ufshcd_get_dev_cmd_tag(struct ufs_hba *hba, int *tag_out)
+{
+	int tag;
+	bool ret = false;
+	unsigned long tmp;
+
+	if (!tag_out)
+		goto out;
+
+	do {
+		tmp = ~hba->lrb_in_use;
+		tag = find_last_bit(&tmp, hba->nutrs);
+		if (tag >= hba->nutrs)
+			goto out;
+	} while (test_and_set_bit_lock(tag, &hba->lrb_in_use));
+
+	*tag_out = tag;
+	ret = true;
+out:
+	return ret;
+}
+
+static inline void ufshcd_put_dev_cmd_tag(struct ufs_hba *hba, int tag)
+{
+	clear_bit_unlock(tag, &hba->lrb_in_use);
+}
+
+/**
+ * ufshcd_exec_dev_cmd - API for sending device management requests
+ * @hba - UFS hba
+ * @cmd_type - specifies the type (NOP, Query...)
+ * @timeout - time in seconds
+ *
+ * NOTE: Since there is only one available tag for device management commands,
+ * it is expected you hold the hba->dev_cmd.lock mutex.
+ */
+static int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
+		enum dev_cmd_type cmd_type, int timeout)
+{
+	struct ufshcd_lrb *lrbp;
+	int err;
+	int tag;
+	struct completion wait;
+	unsigned long flags;
+
+	/*
+	 * Get free slot, sleep if slots are unavailable.
+	 * Even though we use wait_event() which sleeps indefinitely,
+	 * the maximum wait time is bounded by SCSI request timeout.
+	 */
+	wait_event(hba->dev_cmd.tag_wq, ufshcd_get_dev_cmd_tag(hba, &tag));
+
+	init_completion(&wait);
+	lrbp = &hba->lrb[tag];
+	WARN_ON(lrbp->cmd);
+	err = ufshcd_compose_dev_cmd(hba, lrbp, cmd_type, tag);
+	if (unlikely(err))
+		goto out_put_tag;
+
+	hba->dev_cmd.complete = &wait;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	ufshcd_send_command(hba, tag);
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	err = ufshcd_wait_for_dev_cmd(hba, lrbp, timeout);
+
+out_put_tag:
+	ufshcd_put_dev_cmd_tag(hba, tag);
+	wake_up(&hba->dev_cmd.tag_wq);
+	return err;
+}
+
+/**
+ * ufshcd_init_query() - init the query response and request parameters
+ * @hba: per-adapter instance
+ * @request: address of the request pointer to be initialized
+ * @response: address of the response pointer to be initialized
+ * @opcode: operation to perform
+ * @idn: flag idn to access
+ * @index: LU number to access
+ * @selector: query/flag/descriptor further identification
+ */
+static inline void ufshcd_init_query(struct ufs_hba *hba,
+		struct ufs_query_req **request, struct ufs_query_res **response,
+		enum query_opcode opcode, u8 idn, u8 index, u8 selector)
+{
+	*request = &hba->dev_cmd.query.request;
+	*response = &hba->dev_cmd.query.response;
+	memset(*request, 0, sizeof(struct ufs_query_req));
+	memset(*response, 0, sizeof(struct ufs_query_res));
+	(*request)->upiu_req.opcode = opcode;
+	(*request)->upiu_req.idn = idn;
+	(*request)->upiu_req.index = index;
+	(*request)->upiu_req.selector = selector;
+}
+
+/**
+ * ufshcd_query_flag() - API function for sending flag query requests
+ * hba: per-adapter instance
+ * query_opcode: flag query to perform
+ * idn: flag idn to access
+ * flag_res: the flag value after the query request completes
+ *
+ * Returns 0 for success, non-zero in case of failure
+ */
+int ufshcd_query_flag(struct ufs_hba *hba, enum query_opcode opcode,
+			enum flag_idn idn, bool *flag_res)
+{
+	struct ufs_query_req *request = NULL;
+	struct ufs_query_res *response = NULL;
+	int err, index = 0, selector = 0;
+
+	BUG_ON(!hba);
+
+	mutex_lock(&hba->dev_cmd.lock);
+	ufshcd_init_query(hba, &request, &response, opcode, idn, index,
+			selector);
+
+	switch (opcode) {
+	case UPIU_QUERY_OPCODE_SET_FLAG:
+	case UPIU_QUERY_OPCODE_CLEAR_FLAG:
+	case UPIU_QUERY_OPCODE_TOGGLE_FLAG:
+		request->query_func = UPIU_QUERY_FUNC_STANDARD_WRITE_REQUEST;
+		break;
+	case UPIU_QUERY_OPCODE_READ_FLAG:
+		request->query_func = UPIU_QUERY_FUNC_STANDARD_READ_REQUEST;
+		if (!flag_res) {
+			/* No dummy reads */
+			dev_err(hba->dev, "%s: Invalid argument for read request\n",
+					__func__);
+			err = -EINVAL;
+			goto out_unlock;
+		}
+		break;
+	default:
+		dev_err(hba->dev,
+			"%s: Expected query flag opcode but got = %d\n",
+			__func__, opcode);
+		err = -EINVAL;
+		goto out_unlock;
+	}
+
+	err = ufshcd_exec_dev_cmd(hba, DEV_CMD_TYPE_QUERY, QUERY_REQ_TIMEOUT);
+
+	if (err) {
+		dev_err(hba->dev,
+			"%s: Sending flag query for idn %d failed, err = %d\n",
+			__func__, idn, err);
+		goto out_unlock;
+	}
+
+	if (flag_res)
+		*flag_res = (be32_to_cpu(response->upiu_res.value) &
+				MASK_QUERY_UPIU_FLAG_LOC) & 0x1;
+
+out_unlock:
+	mutex_unlock(&hba->dev_cmd.lock);
+	return err;
+}
+
+/**
+ * ufshcd_query_attr - API function for sending attribute requests
+ * hba: per-adapter instance
+ * opcode: attribute opcode
+ * idn: attribute idn to access
+ * index: index field
+ * selector: selector field
+ * attr_val: the attribute value after the query request completes
+ *
+ * Returns 0 for success, non-zero in case of failure
+*/
+int ufshcd_query_attr(struct ufs_hba *hba, enum query_opcode opcode,
+			enum attr_idn idn, u8 index, u8 selector, u32 *attr_val)
+{
+	struct ufs_query_req *request = NULL;
+	struct ufs_query_res *response = NULL;
+	int err;
+
+	BUG_ON(!hba);
+
+	if (!attr_val) {
+		dev_err(hba->dev, "%s: attribute value required for opcode 0x%x\n",
+				__func__, opcode);
+		err = -EINVAL;
+		goto out;
+	}
+
+	mutex_lock(&hba->dev_cmd.lock);
+	ufshcd_init_query(hba, &request, &response, opcode, idn, index,
+			selector);
+
+	switch (opcode) {
+	case UPIU_QUERY_OPCODE_WRITE_ATTR:
+		request->query_func = UPIU_QUERY_FUNC_STANDARD_WRITE_REQUEST;
+		request->upiu_req.value = cpu_to_be32(*attr_val);
+		break;
+	case UPIU_QUERY_OPCODE_READ_ATTR:
+		request->query_func = UPIU_QUERY_FUNC_STANDARD_READ_REQUEST;
+		break;
+	default:
+		dev_err(hba->dev, "%s: Expected query attr opcode but got = 0x%.2x\n",
+				__func__, opcode);
+		err = -EINVAL;
+		goto out_unlock;
+	}
+
+	err = ufshcd_exec_dev_cmd(hba, DEV_CMD_TYPE_QUERY, QUERY_REQ_TIMEOUT);
+
+	if (err) {
+		dev_err(hba->dev, "%s: opcode 0x%.2x for idn %d failed, err = %d\n",
+				__func__, opcode, idn, err);
+		goto out_unlock;
+	}
+
+	*attr_val = be32_to_cpu(response->upiu_res.value);
+
+out_unlock:
+	mutex_unlock(&hba->dev_cmd.lock);
+out:
+	return err;
+}
+
+/**
+ * ufshcd_query_descriptor - API function for sending descriptor requests
+ * hba: per-adapter instance
+ * opcode: attribute opcode
+ * idn: attribute idn to access
+ * index: index field
+ * selector: selector field
+ * desc_buf: the buffer that contains the descriptor
+ * buf_len: length parameter passed to the device
+ *
+ * Returns 0 for success, non-zero in case of failure.
+ * The buf_len parameter will contain, on return, the length parameter
+ * received on the response.
+ */
+int ufshcd_query_descriptor(struct ufs_hba *hba,
+			enum query_opcode opcode, enum attr_idn idn, u8 index,
+			u8 selector, u8 *desc_buf, int *buf_len)
+{
+	struct ufs_query_req *request = NULL;
+	struct ufs_query_res *response = NULL;
+	int err;
+
+	BUG_ON(!hba);
+
+	if (!desc_buf) {
+		dev_err(hba->dev, "%s: descriptor buffer required for opcode 0x%x\n",
+				__func__, opcode);
+		err = -EINVAL;
+		goto out;
+	}
+
+	if (*buf_len <= QUERY_DESC_MIN_SIZE || *buf_len > QUERY_DESC_MAX_SIZE) {
+		dev_err(hba->dev, "%s: descriptor buffer size (%d) is out of range\n",
+				__func__, *buf_len);
+		err = -EINVAL;
+		goto out;
+	}
+
+	mutex_lock(&hba->dev_cmd.lock);
+	ufshcd_init_query(hba, &request, &response, opcode, idn, index,
+			selector);
+	hba->dev_cmd.query.descriptor = desc_buf;
+	request->upiu_req.length = cpu_to_be16(*buf_len);
+
+	switch (opcode) {
+	case UPIU_QUERY_OPCODE_WRITE_DESC:
+		request->query_func = UPIU_QUERY_FUNC_STANDARD_WRITE_REQUEST;
+		break;
+	case UPIU_QUERY_OPCODE_READ_DESC:
+		request->query_func = UPIU_QUERY_FUNC_STANDARD_READ_REQUEST;
+		break;
+	default:
+		dev_err(hba->dev,
+				"%s: Expected query descriptor opcode but got = 0x%.2x\n",
+				__func__, opcode);
+		err = -EINVAL;
+		goto out_unlock;
+	}
+
+	err = ufshcd_exec_dev_cmd(hba, DEV_CMD_TYPE_QUERY, QUERY_REQ_TIMEOUT);
+
+	if (err) {
+		dev_err(hba->dev, "%s: opcode 0x%.2x for idn %d failed, err = %d\n",
+				__func__, opcode, idn, err);
+		goto out_unlock;
+	}
+
+	hba->dev_cmd.query.descriptor = NULL;
+	*buf_len = be16_to_cpu(response->upiu_res.length);
+
+out_unlock:
+	mutex_unlock(&hba->dev_cmd.lock);
+out:
+	return err;
+}
+
+/**
+ * ufshcd_memory_alloc - allocate memory for host memory space data structures
+ * @hba: per adapter instance
+ *
+ * 1. Allocate DMA memory for Command Descriptor array
+ *	Each command descriptor consist of Command UPIU, Response UPIU and PRDT
+ * 2. Allocate DMA memory for UTP Transfer Request Descriptor List (UTRDL).
+ * 3. Allocate DMA memory for UTP Task Management Request Descriptor List
+ *	(UTMRDL)
+ * 4. Allocate memory for local reference block(lrb).
+ *
+ * Returns 0 for success, non-zero in case of failure
+ */
+static int ufshcd_memory_alloc(struct ufs_hba *hba)
+{
+	size_t utmrdl_size, utrdl_size, ucdl_size;
+
 	/* Allocate memory for UTP command descriptors */
 	ucdl_size = (sizeof(struct utp_transfer_cmd_desc) * hba->nutrs);
 	hba->ucdl_base_addr = dmam_alloc_coherent(hba->dev,

@@ -208,4 +208,83 @@ static inline void ufshcd_hba_stop(struct ufs_hba *hba)
 	ufshcd_writel(hba, CONTROLLER_DISABLE,  REG_CONTROLLER_ENABLE);
 }
 
+static inline void check_upiu_size(void)
+{
+	BUILD_BUG_ON(ALIGNED_UPIU_SIZE <
+		GENERAL_UPIU_REQUEST_SIZE + QUERY_DESC_MAX_SIZE);
+}
+
+extern int ufshcd_runtime_suspend(struct ufs_hba *hba);
+extern int ufshcd_runtime_resume(struct ufs_hba *hba);
+extern int ufshcd_runtime_idle(struct ufs_hba *hba);
+extern int ufshcd_system_suspend(struct ufs_hba *hba);
+extern int ufshcd_system_resume(struct ufs_hba *hba);
+extern int ufshcd_dme_set_attr(struct ufs_hba *hba, u32 attr_sel,
+			       u8 attr_set, u32 mib_val, u8 peer);
+extern int ufshcd_dme_get_attr(struct ufs_hba *hba, u32 attr_sel,
+			       u32 *mib_val, u8 peer);
+
+/* UIC command interfaces for DME primitives */
+#define DME_LOCAL	0
+#define DME_PEER	1
+#define ATTR_SET_NOR	0	/* NORMAL */
+#define ATTR_SET_ST	1	/* STATIC */
+
+static inline int ufshcd_dme_set(struct ufs_hba *hba, u32 attr_sel,
+				 u32 mib_val)
+{
+	return ufshcd_dme_set_attr(hba, attr_sel, ATTR_SET_NOR,
+				   mib_val, DME_LOCAL);
+}
+
+static inline int ufshcd_dme_st_set(struct ufs_hba *hba, u32 attr_sel,
+				    u32 mib_val)
+{
+	return ufshcd_dme_set_attr(hba, attr_sel, ATTR_SET_ST,
+				   mib_val, DME_LOCAL);
+}
+
+static inline int ufshcd_dme_peer_set(struct ufs_hba *hba, u32 attr_sel,
+				      u32 mib_val)
+{
+	return ufshcd_dme_set_attr(hba, attr_sel, ATTR_SET_NOR,
+				   mib_val, DME_PEER);
+}
+
+static inline int ufshcd_dme_peer_st_set(struct ufs_hba *hba, u32 attr_sel,
+					 u32 mib_val)
+{
+	return ufshcd_dme_set_attr(hba, attr_sel, ATTR_SET_ST,
+				   mib_val, DME_PEER);
+}
+
+static inline int ufshcd_dme_get(struct ufs_hba *hba,
+				 u32 attr_sel, u32 *mib_val)
+{
+	return ufshcd_dme_get_attr(hba, attr_sel, mib_val, DME_LOCAL);
+}
+
+static inline int ufshcd_dme_peer_get(struct ufs_hba *hba,
+				      u32 attr_sel, u32 *mib_val)
+{
+	return ufshcd_dme_get_attr(hba, attr_sel, mib_val, DME_PEER);
+}
+
+/* variant specific ops structures */
+#ifdef CONFIG_SCSI_UFS_MSM
+extern const struct ufs_hba_variant_ops ufs_hba_msm_vops;
+#else
+static const struct ufs_hba_variant_ops ufs_hba_msm_vops = {
+	.name = "msm",
+};
+#endif
+
+/* Expose Query-Request API */
+int ufshcd_query_flag(struct ufs_hba *hba, enum query_opcode opcode,
+	enum flag_idn idn, bool *flag_res);
+int ufshcd_query_attr(struct ufs_hba *hba, enum query_opcode opcode,
+	enum attr_idn idn, u8 index, u8 selector, u32 *attr_val);
+int ufshcd_query_descriptor(struct ufs_hba *hba, enum query_opcode opcode,
+	enum attr_idn idn, u8 index, u8 selector, u8 *desc_buf, int *buf_len);
+
 #endif /* End of Header */
