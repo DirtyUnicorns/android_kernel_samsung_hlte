@@ -2576,6 +2576,15 @@ config MSM_QDSP6
 	tristate "QDSP6 support"
 	depends on ARCH_QSD8X50
 	default y
+config INTELLI_PLUG
+	bool "Enable intelli-plug cpu hotplug driver"
+	default n
+	help
+	  Generic Intelli-plug cpu hotplug driver for ARM SOCs
+
+config MSM_AVS_HW
+	bool "Enable Adaptive Voltage Scaling (AVS)"
+	default n
 	help
 	  Enable support for qdsp6. This provides audio and video functionality.
 
