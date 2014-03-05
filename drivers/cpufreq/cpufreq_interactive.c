@@ -119,6 +119,10 @@ static u64 boostpulse_endtime;
 #define DEFAULT_TIMER_SLACK (4 * DEFAULT_TIMER_RATE)
 static int timer_slack_val = DEFAULT_TIMER_SLACK;
 
+#define TOP_STOCK_FREQ 2265600
+
+static bool io_is_busy;
+
 /*
  * Whether to align timer windows across all CPUs. When
  * use_sched_load is true, this flag is ignored and windows
@@ -422,6 +426,8 @@ static void cpufreq_interactive_timer(unsigned long data)
 			if (new_freq < this_hispeed_freq)
 				new_freq = this_hispeed_freq;
 		}
+		if (new_freq > TOP_STOCK_FREQ && cpu_load < 99)
+			new_freq = TOP_STOCK_FREQ;
 	} else {
 		new_freq = choose_freq(pcpu, loadadjfreq);
 	}
