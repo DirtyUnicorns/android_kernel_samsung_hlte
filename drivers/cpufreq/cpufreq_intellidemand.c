@@ -1,3 +1,4 @@
+
 /*
  *  drivers/cpufreq/cpufreq_intellidemand.c
  *
@@ -2338,7 +2339,6 @@ static void cpufreq_intellidemand_power_suspend(struct power_suspend *h)
 	update_sampling_rate(dbs_tuners_ins.sampling_rate);
 	mutex_unlock(&dbs_mutex);
 }
-
 static void cpufreq_intellidemand_power_resume(struct power_suspend *h)
 {
 	mutex_lock(&dbs_mutex);
@@ -2346,7 +2346,6 @@ static void cpufreq_intellidemand_power_resume(struct power_suspend *h)
 	update_sampling_rate(dbs_tuners_ins.sampling_rate);
 	mutex_unlock(&dbs_mutex);
 }
-
 static struct power_suspend cpufreq_intellidemand_power_suspend_info = {
 	.suspend = cpufreq_intellidemand_power_suspend,
 	.resume = cpufreq_intellidemand_power_resume,
