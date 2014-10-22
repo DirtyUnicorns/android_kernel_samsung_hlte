@@ -63,6 +63,10 @@ void *return_address(unsigned int level)
 {
 	return NULL;
 }
+#if defined(CONFIG_ARM_UNWIND)
+/* Include unwind tables from arm-eabi toolchain and kernel source */
+#include <unwind.h>
+#endif
 
 #endif /* CONFIG_FRAME_POINTER || CONFIG_ARM_UNWIND */
 
