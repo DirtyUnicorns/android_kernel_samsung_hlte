@@ -36,8 +36,6 @@ static spinlock_t resume_reason_lock;
 
 static ssize_t last_resume_reason_show(struct kobject *kobj, struct kobj_attribute *attr,
 		char *buf)
-static ssize_t reason_show(struct kobject *kobj, struct kobj_attribute *attr,
-		char *buf)
 {
 	int irq_no, buf_offset = 0;
 	struct irq_desc *desc;
@@ -56,8 +54,6 @@ static ssize_t reason_show(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 static struct kobj_attribute resume_reason = __ATTR_RO(last_resume_reason);
-static struct kobj_attribute resume_reason = __ATTR(last_resume_reason, 0666,
-		reason_show, NULL);
 
 static struct attribute *attrs[] = {
 	&resume_reason.attr,
@@ -117,7 +113,6 @@ static struct notifier_block wakeup_reason_pm_notifier_block = {
  * registers the pm_event notifier
  */
 int __init wakeup_reason_init(void)
-void __init wakeup_reason_init(void)
 {
 	int retval;
 	spin_lock_init(&resume_reason_lock);
@@ -131,7 +126,6 @@ void __init wakeup_reason_init(void)
 		printk(KERN_WARNING "[%s] failed to create a sysfs kobject\n",
 				__func__);
 		return 1;
-		return;
 	}
 	retval = sysfs_create_group(wakeup_reason, &attr_group);
 	if (retval) {
