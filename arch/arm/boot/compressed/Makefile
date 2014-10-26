@@ -27,11 +27,21 @@ AFLAGS_head.o += -DTEXT_OFFSET=$(TEXT_OFFSET)
 ifeq ($(CONFIG_CRYPTO_FIPS),y)
 AFLAGS_head.o += -DFIPS_KERNEL_RAM_BASE=0x00008000
 endif
+AFLAGS_head.o += -Wa,-march=armv7-a$(plus_sec)
+HEAD = head.o
+
+AFLAGS_misc.o +=-Wa,-march=armv7-a$(plus_sec)
+MISC = misc.o
+
+AFLAGS_decompress.o += -Wa,-march=armv7-a$(plus_sec)
+DECOMPRESS = decompress.o
+
 HEAD	= head.o
 OBJS	+= misc.o decompress.o
 ifeq ($(CONFIG_KERNEL_LZ4),y)
 CFLAGS_decompress.o := -Os
 endif
+
 ifeq ($(CONFIG_KERNEL_LZMA),y)
 CFLAGS_decompress.o := -Os
 endif
