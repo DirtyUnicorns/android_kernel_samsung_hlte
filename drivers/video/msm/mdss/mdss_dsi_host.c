@@ -352,6 +352,8 @@ void mdss_dsi_host_init(struct mipi_panel_info *pinfo,
 		if (pdata->panel_info.pdest == DISPLAY_1) {
 			pr_debug("%s: Broadcast mode enabled.\n",
 				 __func__);
+			//pr_info("%s: Broadcast mode enabled.\n",
+			//	 __func__);
 			left_ctrl_pdata = ctrl_pdata;
 		}
 
