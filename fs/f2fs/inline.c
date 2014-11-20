@@ -42,8 +42,8 @@ void read_inline_data(struct page *page, struct page *ipage)
 	src_addr = inline_data_addr(ipage);
 	dst_addr = kmap_atomic(page);
 	memcpy(dst_addr, src_addr, MAX_INLINE_DATA);
-	flush_dcache_page(page);
 	kunmap_atomic(dst_addr);
+	flush_dcache_page(page);
 	SetPageUptodate(page);
 }
 
@@ -104,6 +104,7 @@ int f2fs_convert_inline_page(struct dnode_of_data *dn, struct page *page)
 	dst_addr = kmap_atomic(page);
 	memcpy(dst_addr, src_addr, MAX_INLINE_DATA);
 	kunmap_atomic(dst_addr);
+	flush_dcache_page(page);
 	SetPageUptodate(page);
 no_update:
 	/* write data page to try to make data consistent */
@@ -138,8 +139,8 @@ int f2fs_convert_inline_inode(struct inode *inode)
 
 	ipage = get_node_page(sbi, inode->i_ino);
 	if (IS_ERR(ipage)) {
-		f2fs_unlock_op(sbi);
-		return PTR_ERR(ipage);
+		err = PTR_ERR(ipage);
+		goto out;
 	}
 
 	set_new_dnode(&dn, inode, ipage, ipage, 0);
@@ -148,7 +149,7 @@ int f2fs_convert_inline_inode(struct inode *inode)
 		err = f2fs_convert_inline_page(&dn, page);
 
 	f2fs_put_dnode(&dn);
-
+out:
 	f2fs_unlock_op(sbi);
 
 	f2fs_put_page(page, 1);
@@ -356,6 +357,7 @@ static int f2fs_convert_inline_dir(struct inode *dir, struct page *ipage,
 					NR_INLINE_DENTRY * F2FS_SLOT_LEN);
 
 	kunmap_atomic(dentry_blk);
+	flush_dcache_page(page);
 	SetPageUptodate(page);
 	set_page_dirty(page);
 
