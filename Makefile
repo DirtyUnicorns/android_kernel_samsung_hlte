@@ -380,11 +380,11 @@ KBUILD_CFLAGS	+= -Wno-unused
 # L1/L2 cache size parameters by @JustArchi
 KBUILD_CFLAGS	+= --param l1-cache-size=16 --param l1-cache-line-size=16 --param l2-cache-size=2048
 
-KBUILD_AFLAGS_KERNEL :=
-KBUILD_CFLAGS_KERNEL :=
+KBUILD_AFLAGS_KERNEL := $(KERNELFLAGS)
+KBUILD_CFLAGS_KERNEL := $(KERNELFLAGS)
 KBUILD_AFLAGS   := -D__ASSEMBLY__
-KBUILD_AFLAGS_MODULE  := -DMODULE
-KBUILD_CFLAGS_MODULE  := -DMODULE
+KBUILD_AFLAGS_MODULE  := $(MODFLAGS)
+KBUILD_CFLAGS_MODULE  := $(MODFLAGS)
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
