@@ -128,6 +128,7 @@ struct usb_hcd {
 	unsigned		has_tt:1;	/* Integrated TT in root hub */
 	unsigned		broken_pci_sleep:1;	/* Don't put the
 			controller in PCI-D3 for system sleep */
+	unsigned		cant_recv_wakeups:1;
 
 	unsigned int		irq;		/* irq allocated */
 	void __iomem		*regs;		/* device memory/io */
