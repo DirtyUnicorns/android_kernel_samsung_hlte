@@ -372,8 +372,7 @@ KBUILD_CFLAGS   := -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-delete-null-pointer-checks
 
 # arter97's optimizations
-KBUILD_CFLAGS	+= -s -pipe -fno-pic -O3 -mcpu=cortex-a15 -mtune=cortex-a15 -mfloat-abi=softfp -mfpu=vfpv4 -fno-tree-vectorize -ffast-math -marm
-
+KBUILD_CFLAGS	+= -s -pipe -fno-pic -O3 -mcpu=cortex-a15 -mtune=cortex-a15 -mfloat-abi=softfp -marm -mfpu=neon-vfpv4 -fno-tree-vectorize -ffast-math
 # -Wno-unused
 KBUILD_CFLAGS	+= -Wno-unused
 # L1/L2 cache size parameters by @JustArchi
