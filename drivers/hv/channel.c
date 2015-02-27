@@ -178,6 +178,7 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 	if (!open_info) {
 		err = -ENOMEM;
 		goto errorout;
+		goto error_gpadl;
 	}
 
 	init_completion(&open_info->waitevent);
@@ -194,6 +195,7 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 	if (userdatalen > MAX_USER_DEFINED_BYTES) {
 		err = -EINVAL;
 		goto errorout;
+		goto error_gpadl;
 	}
 
 	if (userdatalen)
@@ -231,6 +233,15 @@ cleanup:
 errorout:
 	hv_ringbuffer_cleanup(&newchannel->outbound);
 	hv_ringbuffer_cleanup(&newchannel->inbound);
+error1:
+	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
+	list_del(&open_info->msglistentry);
+	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
+
+error_gpadl:
+	vmbus_teardown_gpadl(newchannel, newchannel->ringbuffer_gpadlhandle);
+
+error0:
 	free_pages((unsigned long)out,
 		get_order(send_ringbuffer_size + recv_ringbuffer_size));
 	kfree(open_info);
