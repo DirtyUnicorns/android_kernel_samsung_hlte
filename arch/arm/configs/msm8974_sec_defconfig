@@ -19,7 +19,7 @@ CONFIG_F2FS_FS_XATTR=y
 # CONFIG_F2FS_FS_POSIX_ACL is not set
 CONFIG_F2FS_FS_SECURITY=y
 # CONFIG_F2FS_CHECK_FS is not set
-CONFIG_LOCALVERSION="-unicornblood-kernel-hlte-f2fs-lp-v0.56"
+CONFIG_LOCALVERSION="-unicornblood-kernel-hlte-f2fs-lp-v0.57"
 CONFIG_LOCALVERSION_AUTO=n
 # CONFIG_RCU_FAST_NO_HZ is not set
 # CONFIG_IKCONFIG is not set
