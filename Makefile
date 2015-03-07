@@ -372,7 +372,9 @@ KBUILD_CFLAGS   := -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-delete-null-pointer-checks
 
 # arter97's optimizations
-KBUILD_CFLAGS	+= -s -pipe -fno-pic -O3 -mcpu=cortex-a15 -mtune=cortex-a15 -mfloat-abi=softfp -marm -mfpu=neon-vfpv4 -fno-tree-vectorize -ffast-math
+KBUILD_CFLAGS	+= -s -pipe -fno-pic -mcpu=cortex-a15 -mtune=cortex-a15 -mfloat-abi=softfp
+# Hundsbuah's optimizations
+KBUILD_CFLAGS	+= -fgcse-sm -fgcse-las -marm -mfpu=neon-vfpv4 -fno-tree-vectorize -ffast-math
 # -Wno-unused
 KBUILD_CFLAGS	+= -Wno-unused
 # L1/L2 cache size parameters by @JustArchi
@@ -570,7 +572,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
 else
-KBUILD_CFLAGS	+= -O2
+KBUILD_CFLAGS	+= -O3
 ifeq ($(ENABLE_GRAPHITE),true)
 KBUILD_CFLAGS	+= -fgraphite -floop-parallelize-all -ftree-loop-linear -floop-interchange -floop-strip-mine -floop-block
 endif
