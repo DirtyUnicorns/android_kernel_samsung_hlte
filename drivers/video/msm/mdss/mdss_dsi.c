@@ -993,10 +993,12 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		ctrl_pdata->mdp_tg_on = 1;
 		if (ctrl_pdata->dsi_on_state == DSI_HS_MODE)
 			rc = mdss_dsi_unblank(pdata);
+		lcd_notifier_call_chain(LCD_EVENT_ON_END, NULL);
 		break;
 	case MDSS_EVENT_BLANK:
 		lcd_notifier_call_chain(LCD_EVENT_OFF_START, NULL);
 		if (ctrl_pdata->dsi_off_state == DSI_HS_MODE)
+		if (ctrl_pdata->off_cmds.link_state == DSI_HS_MODE)
 			rc = mdss_dsi_blank(pdata);
 		break;
 	case MDSS_EVENT_PANEL_OFF:
