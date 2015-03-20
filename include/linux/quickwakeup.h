@@ -1,6 +1,6 @@
 /* include/linux/quickwakeup.h
  *
- * Copyright (C) 2013 Motorola.
+ * Copyright (C) 2014 Motorola Mobility LLC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -12,6 +12,11 @@
  * GNU General Public License for more details.
  *
  */
+
+#ifndef _QUICKWAKEUP_H_
+#define _QUICKWAKEUP_H_
+
+#ifdef __KERNEL__
 
 struct quickwakeup_ops {
 	struct list_head list;
@@ -26,14 +31,16 @@ struct quickwakeup_ops {
 
 int quickwakeup_register(struct quickwakeup_ops *ops);
 void quickwakeup_unregister(struct quickwakeup_ops *ops);
-int quickwakeup_check(void);
-int quickwakeup_execute(void);
+bool quickwakeup_suspend_again(void);
 
 #else
 
 static inline int quickwakeup_register(struct quickwakeup_ops *ops) { return 0; };
 static inline void quickwakeup_unregister(struct quickwakeup_ops *ops) {};
-static inline int quickwakeup_check(void) { return 0; };
-static inline int quickwakeup_execute(void) { return 0; };
+static inline bool quickwakeup_suspend_again(void) { return 0; };
 
-#endif
+#endif /* CONFIG_QUICK_WAKEUP */
+
+#endif /* __KERNEL__ */
+
+#endif /* _QUICKWAKEUP_H_ */
