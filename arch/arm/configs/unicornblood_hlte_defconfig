@@ -1,3 +1,7 @@
+#
+# Automatically generated file; DO NOT EDIT.
+# Linux/arm 3.4.106 Kernel Configuration
+#
 # CONFIG_ARM_PATCH_PHYS_VIRT is not set
 CONFIG_EXPERIMENTAL=y
 CONFIG_KERNEL_LZMA=y
@@ -13,7 +17,7 @@ CONFIG_LZ4_DECOMPRESS=y
 CONFIG_SNAPPY_COMPRESS=y
 CONFIG_SNAPPY_DECOMPRESS=y
 CONFIG_SYSVIPC=y
-CONFIG_LOCALVERSION="-unicornblood-kernel-hlte-lp-v1.10"
+CONFIG_LOCALVERSION="-unicornblood-kernel-hlte-lp-v1.15"
 CONFIG_LOCALVERSION_AUTO=n
 # CONFIG_RCU_FAST_NO_HZ is not set
 # CONFIG_IKCONFIG is not set
