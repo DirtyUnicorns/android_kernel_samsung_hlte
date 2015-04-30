@@ -1833,6 +1833,12 @@ static int process_isoc_td(struct xhci_hcd *xhci, struct xhci_td *td,
 		frame->status = -EPROTO;
 		skip_td = true;
 		break;
+	case COMP_TX_ERR:
+		frame->status = -EPROTO;
+		if (event_trb != td->last_trb)
+			return 0;
+		skip_td = true;
+		break;
 	case COMP_STOP:
 	case COMP_STOP_INVAL:
 		break;
