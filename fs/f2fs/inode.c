@@ -357,6 +357,11 @@ no_delete:
 		add_dirty_inode(sbi, inode->i_ino, UPDATE_INO);
 out_clear:
 	end_writeback(inode);
+#ifdef CONFIG_F2FS_FS_ENCRYPTION
+	if (F2FS_I(inode)->i_crypt_info)
+		f2fs_free_encryption_info(inode, F2FS_I(inode)->i_crypt_info);
+#endif
+	clear_inode(inode);
 }
 
 /* caller should call f2fs_lock_op() */

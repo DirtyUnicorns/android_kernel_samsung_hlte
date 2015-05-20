@@ -775,6 +775,16 @@ static int f2fs_readdir(struct file *file, void *dirent, filldir_t filldir)
 
 	if (f2fs_has_inline_dentry(inode))
 		return f2fs_read_inline_dir(file, dirent, filldir);
+	if (f2fs_encrypted_inode(inode)) {
+		err = f2fs_get_encryption_info(inode);
+		if (err)
+			return err;
+
+		err = f2fs_fname_crypto_alloc_buffer(inode, F2FS_NAME_LEN,
+								&fstr);
+		if (err < 0)
+			return err;
+	}
 
 	bit_pos = (pos % NR_DENTRY_IN_BLOCK);
 	n = (pos / NR_DENTRY_IN_BLOCK);
