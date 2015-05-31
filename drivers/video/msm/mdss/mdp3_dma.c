@@ -541,8 +541,8 @@ static int mdp3_dmap_lut_config(struct mdp3_dma *dma,
 			addr = MDP3_REG_DMA_P_CSC_LUT2;
 
 		for (i = 0; i < MDP_LUT_SIZE; i++) {
-			color = lut->color0_lut[i] & 0xff;
-			color |= (lut->color1_lut[i] & 0xff) << 8;
+			color = (lut->color0_lut[i] & 0xff) << 8;
+			color |= lut->color1_lut[i] & 0xff;
 			color |= (lut->color2_lut[i] & 0xff) << 16;
 			MDP3_REG_WRITE(addr, color);
 			addr += 4;
