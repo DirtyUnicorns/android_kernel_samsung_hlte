@@ -2584,6 +2584,7 @@ static int mdss_fb_cursor(struct fb_info *info, void __user *p)
 
 static int mdss_fb_set_lut(struct fb_info *info, void __user *p)
 {
+	u32 copy_from_kernel = 0;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct fb_cmap cmap;
 	int ret;
@@ -2595,7 +2596,7 @@ static int mdss_fb_set_lut(struct fb_info *info, void __user *p)
 	if (ret)
 		return ret;
 
-	mfd->mdp.lut_update(mfd, &cmap);
+	mfd->mdp.lut_update(mfd, &cmap, copy_from_kernel);
 	return 0;
 }
 
