@@ -50,7 +50,6 @@ struct usbmix_ctl_map {
 
 /*
  * Topology of SB Extigy (see on the wide screen :)
-
 USB_IN[1] --->FU[2]------------------------------+->MU[16]-->PU[17]-+->FU[18]--+->EU[27]--+->EU[21]-->FU[22]--+->FU[23] > Dig_OUT[24]
                                                  ^                  |          |          |                   |
 USB_IN[3] -+->SU[5]-->FU[6]--+->MU[14] ->PU[15]->+                  |          |          |                   +->FU[25] > Dig_OUT[26]
@@ -136,7 +135,6 @@ static struct usbmix_name_map mp3plus_map[] = {
 };
 
 /* Topology of SB Audigy 2 NX
-
           +----------------------------->EU[27]--+
           |                                      v
           | +----------------------------------->SU[29]---->FU[22]-->Dig_OUT[24]
@@ -304,6 +302,14 @@ static struct usbmix_name_map hercules_usb51_map[] = {
 	{ 0 }				/* terminator */
 };
 
+/* some (all?) SCMS USB3318 devices are affected by a firmware lock up
+ * when anything attempts to access FU 10 (control)
+ */
+static const struct usbmix_name_map scms_usb3318_map[] = {
+	{ 10, NULL },
+	{ 0 }
+};
+
 /*
  * Control map entries
  */
@@ -371,6 +377,20 @@ static struct usbmix_ctl_map usbmix_ctl_maps[] = {
 		.map = scratch_live_map,
 		.ignore_ctl_error = 1,
 	},
+	{
+		/* MAYA44 USB+ */
+		.id = USB_ID(0x2573, 0x0008),
+		.map = maya44_map,
+	},
+	{
+		/* KEF X300A */
+		.id = USB_ID(0x27ac, 0x1000),
+		.map = scms_usb3318_map,
+	},
+	{
+		/* Arcam rPAC */
+		.id = USB_ID(0x25c4, 0x0003),
+		.map = scms_usb3318_map,
+	},
 	{ 0 } /* terminator */
 };
-
