@@ -952,10 +952,14 @@ static ssize_t show_available_freqs(struct device *d,
 	/* Truncate the trailing space */
 	if (count)
 		count--;
+	int index, num_chars = 0;
 
-	count += sprintf(&buf[count], "\n");
+	for (index = 0; index < df->profile->max_state; index++)
+		num_chars += snprintf(buf + num_chars, PAGE_SIZE, "%d ",
+		df->profile->freq_table[index]);
+	buf[num_chars++] = '\n';
 
-	return count;
+	return num_chars;
 }
 
 static ssize_t show_trans_table(struct device *dev, struct device_attribute *attr,
