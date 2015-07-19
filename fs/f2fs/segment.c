@@ -79,9 +79,9 @@ struct llist_node *llist_reverse_order(struct llist_node *head)
 /**
  * Copied from latest linux/list.h
  * list_last_entry - get the last element from a list
- * @ptr:	the list head to take the element from.
- * @type:	the type of the struct this is embedded in.
- * @member:	the name of the list_struct within the struct.
+ * @ptr:        the list head to take the element from.
+ * @type:       the type of the struct this is embedded in.
+ * @member:     the name of the list_struct within the struct.
  *
  * Note, that list is expected to be not empty.
  */
@@ -296,6 +296,7 @@ void commit_inmem_pages(struct inode *inode, bool abort)
 		.sbi = sbi,
 		.type = DATA,
 		.rw = WRITE_SYNC | REQ_PRIO,
+		.encrypted_page = NULL,
 	};
 
 	/*
@@ -315,6 +316,7 @@ void commit_inmem_pages(struct inode *inode, bool abort)
 		if (!abort) {
 			lock_page(cur->page);
 			if (cur->page->mapping == inode->i_mapping) {
+				set_page_dirty(cur->page);
 				f2fs_wait_on_page_writeback(cur->page, DATA);
 				if (clear_page_dirty_for_io(cur->page))
 					inode_dec_dirty_pages(inode);
@@ -572,6 +574,17 @@ static int f2fs_issue_discard(struct f2fs_sb_info *sbi,
 {
 	sector_t start = SECTOR_FROM_BLOCK(blkstart);
 	sector_t len = SECTOR_FROM_BLOCK(blklen);
+	struct seg_entry *se;
+	unsigned int offset;
+	block_t i;
+
+	for (i = blkstart; i < blkstart + blklen; i++) {
+		se = get_seg_entry(sbi, GET_SEGNO(sbi, i));
+		offset = GET_BLKOFF_FROM_SEG0(sbi, i);
+
+		if (!f2fs_test_and_set_bit(offset, se->discard_map))
+			sbi->discard_blks--;
+	}
 	trace_f2fs_issue_discard(sbi->sb, blkstart, blklen);
 	return blkdev_issue_discard(sbi->sb->s_bdev, start, len, GFP_NOFS, 0);
 }
@@ -591,12 +604,8 @@ void discard_next_dnode(struct f2fs_sb_info *sbi, block_t blkaddr)
 		err = f2fs_issue_discard(sbi, blkaddr, 1);
 	}
 
-	if (err) {
-		struct page *page = grab_meta_page(sbi, blkaddr);
-		/* zero-filled page */
-		set_page_dirty(page);
-		f2fs_put_page(page, 1);
-	}
+	if (err)
+		update_meta_page(sbi, NULL, blkaddr);
 }
 
 static void __add_discard_entry(struct f2fs_sb_info *sbi,
@@ -605,7 +614,6 @@ static void __add_discard_entry(struct f2fs_sb_info *sbi,
 {
 	struct list_head *head = &SM_I(sbi)->discard_list;
 	struct discard_entry *new, *last;
-	unsigned int i;
 
 	if (!list_empty(head)) {
 		last = list_last_entry(head, struct discard_entry, list);
@@ -623,11 +631,6 @@ static void __add_discard_entry(struct f2fs_sb_info *sbi,
 	list_add_tail(&new->list, head);
 done:
 	SM_I(sbi)->nr_discards += end - start;
-	for (i = start; i < end; i++) {
-		f2fs_set_bit(i, se->discard_map);
-		sbi->discard_blks--;
-	}
-	cpc->trimmed += end - start;
 }
 
 static void add_discard_addrs(struct f2fs_sb_info *sbi, struct cp_control *cpc)
@@ -643,30 +646,13 @@ static void add_discard_addrs(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	bool force = (cpc->reason == CP_DISCARD);
 	int i;
 
-	if (!force && (!test_opt(sbi, DISCARD) ||
-			SM_I(sbi)->nr_discards >= SM_I(sbi)->max_discards))
+	if (se->valid_blocks == max_blocks)
 		return;
 
-	if (!se->valid_blocks) {
-		struct dirty_seglist_info *dirty_i = DIRTY_I(sbi);
-
-		if (!force)
+	if (!force) {
+		if (!test_opt(sbi, DISCARD) || !se->valid_blocks ||
+		    SM_I(sbi)->nr_discards >= SM_I(sbi)->max_discards)
 			return;
-		/*
-		 * if this segment is registered in the prefree list, then
-		 * we should skip adding a discard candidate, and let the
-		 * checkpoint do that later.
-		 */
-		mutex_lock(&dirty_i->seglist_lock);
-		if (test_bit(cpc->trim_start, dirty_i->dirty_segmap[PRE])) {
-			mutex_unlock(&dirty_i->seglist_lock);
-			cpc->trimmed += sbi->blocks_per_seg;
-			return;
-		}
-		mutex_unlock(&dirty_i->seglist_lock);
-	} else if (se->valid_blocks == max_blocks) {
-		/* zero block will be discarded through the prefree list */
-		return;
 	}
 
 	/* SIT_VBLOCK_MAP_SIZE should be multiple of sizeof(unsigned long) */
@@ -680,10 +666,6 @@ static void add_discard_addrs(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 			break;
 
 		end = __find_rev_next_zero_bit(dmap, max_blocks, start + 1);
-
-		if (force && end - start < cpc->trim_minlen)
-			continue;
-
 		__add_discard_entry(sbi, cpc, se, start, end);
 	}
 }
@@ -750,6 +732,7 @@ void clear_prefree_segments(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		if (cpc->reason == CP_DISCARD && entry->len < cpc->trim_minlen)
 			goto skip;
 		f2fs_issue_discard(sbi, entry->blkaddr, entry->len);
+		cpc->trimmed += entry->len;
 skip:
 		list_del(&entry->list);
 		SM_I(sbi)->nr_discards -= entry->len;
@@ -801,7 +784,7 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 	if (del > 0) {
 		if (f2fs_test_and_set_bit(offset, se->cur_valid_map))
 			f2fs_bug_on(sbi, 1);
-		if (f2fs_test_and_set_bit(offset, se->discard_map))
+		if (!f2fs_test_and_set_bit(offset, se->discard_map))
 			sbi->discard_blks--;
 	} else {
 		if (!f2fs_test_and_clear_bit(offset, se->cur_valid_map))
@@ -901,14 +884,23 @@ struct page *get_sum_page(struct f2fs_sb_info *sbi, unsigned int segno)
 	return get_meta_page(sbi, GET_SUM_BLOCK(sbi, segno));
 }
 
+void update_meta_page(struct f2fs_sb_info *sbi, void *src, block_t blk_addr)
+{
+	struct page *page = grab_meta_page(sbi, blk_addr);
+	void *dst = page_address(page);
+
+	if (src)
+		memcpy(dst, src, PAGE_CACHE_SIZE);
+	else
+		memset(dst, 0, PAGE_CACHE_SIZE);
+	set_page_dirty(page);
+	f2fs_put_page(page, 1);
+}
+
 static void write_sum_page(struct f2fs_sb_info *sbi,
 			struct f2fs_summary_block *sum_blk, block_t blk_addr)
 {
-	struct page *page = grab_meta_page(sbi, blk_addr);
-	void *kaddr = page_address(page);
-	memcpy(kaddr, sum_blk, PAGE_CACHE_SIZE);
-	set_page_dirty(page);
-	f2fs_put_page(page, 1);
+	update_meta_page(sbi, (void *)sum_blk, blk_addr);
 }
 
 static int is_next_segment_free(struct f2fs_sb_info *sbi, int type)
@@ -1363,6 +1355,7 @@ void write_meta_page(struct f2fs_sb_info *sbi, struct page *page)
 		.rw = WRITE_SYNC | REQ_META | REQ_PRIO,
 		.blk_addr = page->index,
 		.page = page,
+		.encrypted_page = NULL,
 	};
 
 	set_page_writeback(page);
@@ -1396,7 +1389,8 @@ void rewrite_data_page(struct f2fs_io_info *fio)
 	f2fs_submit_page_mbio(fio);
 }
 
-void f2fs_replace_block(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
+static void __f2fs_replace_block(struct f2fs_sb_info *sbi,
+				struct f2fs_summary *sum,
 				block_t old_blkaddr, block_t new_blkaddr,
 				bool recover_curseg)
 {
@@ -1456,23 +1450,37 @@ void f2fs_replace_block(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	mutex_unlock(&curseg->curseg_mutex);
 }
 
+void f2fs_replace_block(struct f2fs_sb_info *sbi, struct dnode_of_data *dn,
+				block_t old_addr, block_t new_addr,
+				unsigned char version, bool recover_curseg)
+{
+	struct f2fs_summary sum;
+
+	set_summary(&sum, dn->nid, dn->ofs_in_node, version);
+
+	__f2fs_replace_block(sbi, &sum, old_addr, new_addr, recover_curseg);
+
+	dn->data_blkaddr = new_addr;
+	set_data_blkaddr(dn);
+	f2fs_update_extent_cache(dn);
+}
+
 static inline bool is_merged_page(struct f2fs_sb_info *sbi,
 					struct page *page, enum page_type type)
 {
 	enum page_type btype = PAGE_TYPE_OF_BIO(type);
 	struct f2fs_bio_info *io = &sbi->write_io[btype];
 	struct bio_vec *bvec;
+	struct page *target;
 	int i;
 
 	down_read(&io->io_rwsem);
-	if (!io->bio)
-		goto out;
 	if (!io->bio) {
 		up_read(&io->io_rwsem);
 		return false;
 	}
 
-	bio_for_each_segment_all(bvec, io->bio, i) {
+	__bio_for_each_segment(bvec, io->bio, i, 0) {
 
 		if (bvec->bv_page->mapping) {
 			target = bvec->bv_page;
@@ -1485,14 +1493,12 @@ static inline bool is_merged_page(struct f2fs_sb_info *sbi,
 			target = ctx->w.control_page;
 		}
 
-	__bio_for_each_segment(bvec, io->bio, i, 0) {
-		if (page == bvec->bv_page) {
+		if (page == target) {
 			up_read(&io->io_rwsem);
 			return true;
 		}
 	}
 
-out:
 	up_read(&io->io_rwsem);
 	return false;
 }

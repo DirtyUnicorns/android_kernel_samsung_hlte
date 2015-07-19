@@ -44,7 +44,6 @@ enum {
 	Opt_disable_roll_forward,
 	Opt_norecovery,
 	Opt_discard,
-	Opt_nodiscard,
 	Opt_noheap,
 	Opt_user_xattr,
 	Opt_nouser_xattr,
@@ -68,7 +67,6 @@ static match_table_t f2fs_tokens = {
 	{Opt_disable_roll_forward, "disable_roll_forward"},
 	{Opt_norecovery, "norecovery"},
 	{Opt_discard, "discard"},
-	{Opt_nodiscard, "nodiscard"},
 	{Opt_noheap, "no_heap"},
 	{Opt_user_xattr, "user_xattr"},
 	{Opt_nouser_xattr, "nouser_xattr"},
@@ -260,6 +258,7 @@ static void init_once(void *foo)
 static int parse_options(struct super_block *sb, char *options)
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
+	struct request_queue *q;
 	substring_t args[MAX_OPT_ARGS];
 	char *p, *name;
 	int arg = 0;
@@ -304,10 +303,14 @@ static int parse_options(struct super_block *sb, char *options)
 				return -EINVAL;
 			break;
 		case Opt_discard:
-			set_opt(sbi, DISCARD);
-			break;
-		case Opt_nodiscard:
-			clear_opt(sbi, DISCARD);
+			q = bdev_get_queue(sb->s_bdev);
+			if (blk_queue_discard(q)) {
+				set_opt(sbi, DISCARD);
+			} else {
+				f2fs_msg(sb, KERN_WARNING,
+					"mounting with \"discard\" option, but "
+					"the device does not support discard");
+			}
 			break;
 		case Opt_noheap:
 			set_opt(sbi, NOHEAP);
@@ -448,7 +451,6 @@ static int f2fs_drop_inode(struct inode *inode)
 
 			if (F2FS_HAS_BLOCKS(inode))
 				f2fs_truncate(inode);
-
 
 #ifdef CONFIG_F2FS_FS_ENCRYPTION
 			if (F2FS_I(inode)->i_crypt_info)
@@ -1038,7 +1040,7 @@ out:
 	return 0;
 }
 
-int f2fs_commit_super(struct f2fs_sb_info *sbi)
+int f2fs_commit_super(struct f2fs_sb_info *sbi, bool recover)
 {
 	struct buffer_head *sbh = sbi->raw_super_buf;
 	sector_t block = sbh->b_blocknr;
@@ -1050,7 +1052,9 @@ int f2fs_commit_super(struct f2fs_sb_info *sbi)
 	err = sync_dirty_buffer(sbh);
 
 	sbh->b_blocknr = block;
-	if (err)
+
+	/* if we are in recovery path, skip writing valid superblock */
+	if (recover || err)
 		goto out;
 
 	/* write current valid superblock */
@@ -1125,6 +1129,7 @@ try_onemore:
 	sbi->raw_super = raw_super;
 	sbi->raw_super_buf = raw_super_buf;
 	mutex_init(&sbi->gc_mutex);
+	mutex_init(&sbi->writepages);
 	mutex_init(&sbi->cp_mutex);
 	init_rwsem(&sbi->node_write);
 	clear_sbi_flag(sbi, SBI_POR_DOING);
@@ -1237,16 +1242,6 @@ try_onemore:
 		proc_create_data("segment_info", S_IRUGO, sbi->s_proc,
 				 &f2fs_seq_segment_info_fops, sb);
 
-	if (test_opt(sbi, DISCARD)) {
-		struct request_queue *q = bdev_get_queue(sb->s_bdev);
-		if (!blk_queue_discard(q)) {
-			f2fs_msg(sb, KERN_WARNING,
-					"mounting with \"discard\" option, but "
-					"the device does not support discard");
-			clear_opt(sbi, DISCARD);
-		}
-	}
-
 	sbi->s_kobj.kset = f2fs_kset;
 	init_completion(&sbi->s_kobj_unregister);
 	err = kobject_init_and_add(&sbi->s_kobj, &f2fs_ktype, NULL,
@@ -1293,7 +1288,7 @@ try_onemore:
 	/* recover broken superblock */
 	if (recovery && !f2fs_readonly(sb) && !bdev_read_only(sb->s_bdev)) {
 		f2fs_msg(sb, KERN_INFO, "Recover invalid superblock");
-		f2fs_commit_super(sbi);
+		f2fs_commit_super(sbi, true);
 	}
 
 	return 0;
