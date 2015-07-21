@@ -23,7 +23,6 @@
 
 #define CPUFREQ_NAME_LEN 16
 
-
 /*********************************************************************
  *                     CPUFREQ NOTIFIER INTERFACE                    *
  *********************************************************************/
@@ -140,7 +139,6 @@ struct cpufreq_freqs {
 	unsigned int new;
 	u8 flags;		/* flags of cpufreq_driver, see below. */
 };
-
 
 /**
  * cpufreq_scale - "old * mult / div" calculation for large values (32-bit-arch safe)
@@ -316,7 +314,6 @@ __ATTR(_name, 0444, show_##_name, NULL)
 static struct global_attr _name =		\
 __ATTR(_name, 0644, show_##_name, store_##_name)
 
-
 /*********************************************************************
  *                        CPUFREQ 2.6. INTERFACE                     *
  *********************************************************************/
@@ -373,15 +370,12 @@ enum {
 	DVFS_MAX_ID
 };
 
-
 int set_freq_limit(unsigned long id, unsigned int freq);
 #endif
-
 
 /*********************************************************************
  *                       CPUFREQ DEFAULT GOVERNOR                    *
  *********************************************************************/
-
 
 /*
   Performance governor is fallback governor if any other gov failed to
@@ -467,8 +461,10 @@ extern struct cpufreq_governor cpufreq_gov_intellimm;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ZZMOOVE)
 extern struct cpufreq_governor cpufreq_gov_zzmoove;
 #define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_zzmoove)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_BARRY_ALLEN)
+extern struct cpufreq_governor cpufreq_gov_barry_allen;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_barry_allen)
 #endif
-
 
 /*********************************************************************
  *                     FREQUENCY TABLE HELPERS                       *
@@ -507,6 +503,5 @@ void cpufreq_frequency_table_get_attr(struct cpufreq_frequency_table *table,
 				      unsigned int cpu);
 
 void cpufreq_frequency_table_put_attr(unsigned int cpu);
-
 
 #endif /* _LINUX_CPUFREQ_H */
