@@ -153,18 +153,29 @@ config ESD_ERR_FG_RECOVERY
 
 config FB_MSM_MDSS_SDC_WXGA_PANEL
 	bool "MDSS SDC WXGA Panel"
-	default n
+        default n
 	---help---
 	The MDSS SDC LCD Panel support
+
+config LCD_NOTIFY
+	bool "LCD notify kernel module"
+        default n
+	---help---
+	Allows LCD on/off event notification to be sent throughout the kernel
 
 config LCD_CONNECTION_CHECK
 	bool "check if LCD connected or not and detect panel vendor"
 	default n
 
-config SAMSUNG_DEBUG_DISPLAY 
+config SAMSUNG_DEBUG_DISPLAY
 	bool "Add Samsung Debugging code"
 	default n
-	
+
+config FB_MSM_MDSS_HDMI_MHL_SII8620_8061
+	depends on FB_MSM_MDSS_HDMI_PANEL
+	bool 'MHL SII8620 and SII8061 support '
+	default n
+
 config FB_MSM_MDSS_TC_DSI2LVDS_WXGA_PANEL
 	bool "TOSHIBA DSI2LVDS CONVERTER"
 	default n
@@ -176,9 +187,10 @@ config TC358764_I2C_CONTROL
 	default n
 	---help---
 	The TOSHIBA I2C CONTROLLER support
+
 config LCD_FORCE_VIDEO_MODE
 	bool "forcing video mode on cmd panle"
-	default n	
+	default n
 
 config FB_MSM_MIPI_SAMSUNG_TFT_VIDEO_WQXGA_PT_PANEL
 	bool "Support SAMSUNG TFT Video WQXGA Panel"
@@ -187,7 +199,6 @@ config FB_MSM_MIPI_SAMSUNG_TFT_VIDEO_WQXGA_PT_PANEL
 config EDP_EXTERNAL_POWER
 	bool "Support EDP external power"
 	default n
-
 
 config FB_MSM_MDSS_MDP3
 	depends on FB_MSM_MDSS
