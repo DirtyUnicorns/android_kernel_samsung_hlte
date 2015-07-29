@@ -2444,7 +2444,7 @@ config MSM_RPC_PROC_COMM_TEST
 
 config MSM_RPC_OEM_RAPI
 	depends on MSM_ONCRPCROUTER
-	default m
+	default n
 	bool "MSM oem rapi"
 	help
 	  Implements MSM oem rapi client module.
@@ -2482,7 +2482,7 @@ config MSM_DALRPC
 config MSM_DALRPC_TEST
 	tristate "DAL RPC test module"
 	depends on (MSM_DALRPC && DEBUG_FS)
-	default m
+	default n
 	help
 	  Exercises DAL RPC calls to QDSP6.
 
@@ -2670,7 +2670,7 @@ config MSM_VREG_SWITCH_INVERTED
 
 config MSM_DMA_TEST
 	tristate "MSM DMA test module"
-	default m
+	default n
 	help
 	  Intended to be compiled as a module.  Provides a device node
 	  and ioctls for testing the MSM dma system.
