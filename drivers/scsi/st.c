@@ -1272,10 +1272,13 @@ static int st_open(struct inode *inode, struct file *filp)
 	if (resumed)
 		scsi_autopm_put_device(STp->device);
 	mutex_unlock(&st_mutex);
+	spin_unlock(&st_use_lock);
+	if (resumed)
+		scsi_autopm_put_device(STp->device);
+	scsi_tape_put(STp);
 	return retval;
 
 }
-
 
 /* Flush the tape buffer before close */
 static int st_flush(struct file *filp, fl_owner_t id)
