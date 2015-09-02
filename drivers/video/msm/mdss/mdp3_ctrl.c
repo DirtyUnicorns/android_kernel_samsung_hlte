@@ -1552,7 +1552,7 @@ static int mdp3_histo_ioctl(struct msm_fb_data_type *mfd, u32 cmd,
 }
 
 static int mdp3_ctrl_lut_update(struct msm_fb_data_type *mfd,
-				struct fb_cmap *cmap)
+				struct fb_cmap *cmap, u32 copy_from_kernel)
 {
 	int rc = 0;
 	struct mdp3_session_data *mdp3_session = mfd->mdp.private1;
@@ -1571,14 +1571,20 @@ static int mdp3_ctrl_lut_update(struct msm_fb_data_type *mfd,
 		return  -EINVAL;
 	}
 
-	rc = copy_from_user(r + cmap->start,
-					cmap->red, sizeof(u16)*cmap->len);
-	rc |= copy_from_user(g + cmap->start,
-					cmap->green, sizeof(u16)*cmap->len);
-	rc |= copy_from_user(b + cmap->start,
-					cmap->blue, sizeof(u16)*cmap->len);
-	if (rc)
-		return rc;
+	if (!copy_from_kernel) {
+		rc = copy_from_user(r + cmap->start,
+						cmap->red, sizeof(u16)*cmap->len);
+		rc |= copy_from_user(g + cmap->start,
+						cmap->green, sizeof(u16)*cmap->len);
+		rc |= copy_from_user(b + cmap->start,
+						cmap->blue, sizeof(u16)*cmap->len);
+		if (rc)
+			return rc;
+	} else {
+		memcpy(&r + cmap->start, cmap->red, sizeof(u16) * cmap->len);
+		memcpy(&g + cmap->start, cmap->green, sizeof(u16) * cmap->len);
+		memcpy(&b + cmap->start, cmap->blue, sizeof(u16) * cmap->len);
+	}
 
 	lut_config.lut_enable = 7;
 	lut_config.lut_sel = mdp3_session->lut_sel;
