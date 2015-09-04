@@ -389,13 +389,10 @@ static void msm_restart_prepare(const char *cmd)
 		printk(KERN_NOTICE "%s : restart_reason = 0x%x\n",
 				__func__, __raw_readl(restart_reason));
 	}
-#ifdef CONFIG_SEC_DEBUG
 	else {
 		printk(KERN_NOTICE "%s: clear reset flag\n", __func__);
 		__raw_writel(0x12345678, restart_reason);
 	}
-#endif
-
 #ifdef USE_RESTART_REASSON_DDR
 	if(restart_reason_ddr_address) {
 		 save_restart_reason = __raw_readl(restart_reason);
