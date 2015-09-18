@@ -333,6 +333,10 @@ int msm_isp_axi_check_stream_state(
 		> MAX_NUM_STREAM) {
 			return -EINVAL;
 		}
+		if (HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i]) >=
+			MAX_NUM_STREAM) {
+ 			return -EINVAL;
+ 		}
 		stream_info = &axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
 		spin_lock_irqsave(&stream_info->lock, flags);
@@ -534,8 +538,10 @@ int msm_isp_request_axi_stream(struct vfe_device *vfe_dev, void *arg)
 		&vfe_dev->axi_data, stream_cfg_cmd);
 	if (rc) {
 		pr_err("%s: Request validation failed\n", __func__);
-		msm_isp_axi_destroy_stream(&vfe_dev->axi_data,
-			HANDLE_TO_IDX(stream_cfg_cmd->axi_stream_handle));
+		if (HANDLE_TO_IDX(stream_cfg_cmd->axi_stream_handle) <
+			MAX_NUM_STREAM)
+			msm_isp_axi_destroy_stream(&vfe_dev->axi_data,
+			      HANDLE_TO_IDX(stream_cfg_cmd->axi_stream_handle));
 		return rc;
 	}
 
@@ -603,11 +609,17 @@ int msm_isp_release_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	int rc = 0, i;
 	struct msm_vfe_axi_stream_release_cmd *stream_release_cmd = arg;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
-	struct msm_vfe_axi_stream *stream_info =
-		&axi_data->stream_info[
-		HANDLE_TO_IDX(stream_release_cmd->stream_handle)];
+	struct msm_vfe_axi_stream *stream_info;
 	struct msm_vfe_axi_stream_cfg_cmd stream_cfg;
 
+
+	if (HANDLE_TO_IDX(stream_release_cmd->stream_handle) >=
+		MAX_NUM_STREAM) {
+		pr_err("%s: Invalid stream handle\n", __func__);
+		return -EINVAL;
+	}
+	stream_info = &axi_data->stream_info[
+		HANDLE_TO_IDX(stream_release_cmd->stream_handle)];
 	if (stream_info->state == AVALIABLE) {
 		pr_err("%s: Stream already released\n", __func__);
 		return -EINVAL;
@@ -842,6 +854,15 @@ static void msm_isp_process_done_buf(struct vfe_device *vfe_dev,
 	struct timeval *time_stamp;
 	uint32_t stream_idx = HANDLE_TO_IDX(stream_info->stream_handle);
 	uint32_t frame_id = vfe_dev->axi_data.
+	uint32_t buf_src;
+	uint32_t frame_id;
+
+	if (stream_idx >= MAX_NUM_STREAM) {
+		pr_err("%s: Invalid stream_idx", __func__);
+		return;
+	}
+
+	frame_id = vfe_dev->axi_data.
 		src_info[SRC_TO_INTF(stream_info->stream_src)].frame_id;
 
 	if (buf && ts) {
@@ -937,6 +958,10 @@ static void msm_isp_update_camif_output_count(
 		> MAX_NUM_STREAM) {
 			return;
 		}
+		if (HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i]) >=
+			MAX_NUM_STREAM) {
+ 			return;
+ 		}
 		stream_info =
 			&axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
@@ -1188,6 +1213,10 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		> MAX_NUM_STREAM) {
 			return -EINVAL;
 		}
+		if (HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i]) >=
+			MAX_NUM_STREAM) {
+ 			return -EINVAL;
+ 		}
 		stream_info = &axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
 		src_state = axi_data->src_info[
@@ -1262,6 +1291,10 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 		> MAX_NUM_STREAM) {
 			return -EINVAL;
 		}
+		if (HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i]) >=
+			MAX_NUM_STREAM) {
+ 			return -EINVAL;
+ 		}
 		stream_info = &axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
 
@@ -1481,7 +1514,9 @@ void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 	for (i = 0; i < axi_data->hw_info->num_comp_mask; i++) {
 		comp_info = &axi_data->composite_info[i];
 		if (comp_mask & (1 << i)) {
-			if (!comp_info->stream_handle) {
+			stream_idx = HANDLE_TO_IDX(comp_info->stream_handle);
+			if ((!comp_info->stream_handle) ||
+				(stream_idx >= MAX_NUM_STREAM)) {
 				pr_err("%s: Invalid handle for composite irq\n",
 					__func__);
 			} else {
@@ -1518,7 +1553,9 @@ void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 
 	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
 		if (wm_mask & (1 << i)) {
-			if (!axi_data->free_wm[i]) {
+			stream_idx = HANDLE_TO_IDX(axi_data->free_wm[i]);
+			if ((!axi_data->free_wm[i]) ||
+				(stream_idx >= MAX_NUM_STREAM)) {
 				pr_err("%s: Invalid handle for wm irq\n",
 					__func__);
 				continue;
