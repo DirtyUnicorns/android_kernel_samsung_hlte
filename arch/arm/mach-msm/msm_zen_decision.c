@@ -276,7 +276,6 @@ static int zd_probe(struct platform_device *pdev)
 	}
 
 	/* Setup power supply */
-	psy = power_supply_get_by_name(ps_name);
 	// We can continue without finding PS info, print debug info
 	if (!psy)
 		pr_warn("[%s]: power supply '%s' not found, continuing without \n", ZEN_DECISION, ps_name);
